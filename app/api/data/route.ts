@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { NextResponse } from 'next/server';
 
 const COOKIE = 'cike_workspace';
-type ActionBody = { action: string; id?: string; cardId?: string; folderId?: string; name?: string; color?: string; coverType?: string; coverValue?: string | null; term?: string; meaning?: string; entries?: Array<{ term: string; meaning: string }>; session?: { practiceType: string; contentMode: string; scopeKey: string; scopeLabel: string; totalCount: number; correctCount: number; accuracy: number; averageItemMs: number; itemsPerMinute: number } };
+type ActionBody = { action: string; id?: string; ids?: string[]; cardId?: string; folderId?: string; name?: string; color?: string; coverType?: string; coverValue?: string | null; term?: string; meaning?: string; entries?: Array<{ term: string; meaning: string }>; session?: { practiceType: string; contentMode: string; scopeKey: string; scopeLabel: string; totalCount: number; correctCount: number; accuracy: number; averageItemMs: number; itemsPerMinute: number } };
 
 function cookieValue(request: Request, name: string) {
   const raw = request.headers.get('cookie') ?? '';
@@ -107,6 +107,13 @@ export async function POST(request: Request) {
         await env.DB.prepare('UPDATE entries SET term = ?, meaning = ?, normalized_term = ?, updated_at = ? WHERE id = ?').bind(term, meaning, normalize(term), now, body.id).run(); break;
       }
       case 'deleteEntry': if (!body.id || !(await ownsEntry(workspace.id, body.id))) throw new Error('NOT_FOUND'); else { await env.DB.prepare('DELETE FROM entries WHERE id = ?').bind(body.id).run(); break; }
+      case 'bulkDeleteEntries': {
+        const ids = [...new Set(body.ids ?? [])].filter((id) => typeof id === 'string' && id.length > 0);
+        if (!ids.length || ids.length > 2000) throw new Error('INVALID_BULK_DELETE');
+        const placeholders = ids.map(() => '?').join(', ');
+        await env.DB.prepare(`DELETE FROM entries WHERE id IN (${placeholders}) AND folder_id IN (SELECT f.id FROM folders f JOIN cards c ON f.card_id = c.id WHERE c.workspace_id = ?)`).bind(...ids, workspace.id).run();
+        break;
+      }
       case 'importEntries': {
         if (!body.folderId || !(await ownsFolder(workspace.id, body.folderId)) || !Array.isArray(body.entries) || body.entries.length > 2000) throw new Error('INVALID_IMPORT');
         const base = await env.DB.prepare('SELECT COUNT(*) AS count FROM entries WHERE folder_id = ?').bind(body.folderId).first<{ count: number }>();
