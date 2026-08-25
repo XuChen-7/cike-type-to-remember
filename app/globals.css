@@ -147,9 +147,10 @@ button,input { font:inherit; } button,a { -webkit-tap-highlight-color:transparen
 .typing-hint { color:#71807b; font-size:11px; }
 .keyboard { width:min(680px,100%); margin:56px auto 0; display:grid; gap:6px; opacity:.72; }
 .keyboard>div { display:flex; justify-content:center; gap:6px; }
-.keyboard span { display:grid; place-items:center; width:48px; height:43px; border:1px solid #43504d; border-radius:7px; background:#2b3634; color:#87948f; font-family:ui-monospace,monospace; font-size:11px; transition:.1s; }
-.keyboard span.active { border-color:#d8a33e; background:#725d2e; color:#fff3d3; transform:translateY(2px); }
-.keyboard span.space-key { width:260px; }
+.keyboard button { display:grid; place-items:center; width:48px; height:43px; padding:0; border:1px solid #43504d; border-radius:7px; background:#2b3634; color:#87948f; font-family:ui-monospace,monospace; font-size:11px; cursor:pointer; transition:.1s; }
+.keyboard button:hover { border-color:#687873; color:#d3dad7; }
+.keyboard button.active { border-color:#d8a33e; background:#725d2e; color:#fff3d3; transform:translateY(2px); }
+.keyboard button.space-key { width:260px; }
 
 .dictation-stage { min-height:calc(100vh - 91px); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:55px 20px 80px; text-align:center; }
 .dictation-label { margin:0 0 18px; color:#8d9b96; font-size:11px; letter-spacing:.12em; }

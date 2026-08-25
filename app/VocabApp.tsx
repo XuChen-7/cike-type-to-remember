@@ -217,28 +217,54 @@ function PracticeHeader({ label, index, total, accuracy, metric, onExit }: { lab
 function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; onExit: () => void; onFinish: (result: PracticeResult) => void }) {
   const items = active.scope.entries; const [index, setIndex] = useState(0); const [typed, setTyped] = useState(''); const [totalKeys, setTotalKeys] = useState(0); const [correctKeys, setCorrectKeys] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const [flashError, setFlashError] = useState(false); const started = useRef(Date.now()); const itemHadError = useRef(false); const input = useRef<HTMLInputElement>(null); const composing = useRef(false);
   const item = items[index]; const activeMs = durations.reduce((sum, value) => sum + value, 0) + (index < items.length ? Date.now() - started.current : 0); const speed = index && activeMs ? index / (activeMs / 60000) : 0; const accuracy = totalKeys ? correctKeys / totalKeys : 1;
-  useEffect(() => { input.current?.focus(); }, [index]);
-  function process(value: string) {
-    if (!item) return;
-    if (value.length < typed.length) { setTyped(value); return; }
-    const added = value.slice(typed.length); if (!added) return;
-    const expected = item.term.slice(typed.length, typed.length + added.length);
-    setTotalKeys((count) => count + splitGraphemes(added).length);
-    if (normalizeAnswer(added, active.options.caseSensitive) !== normalizeAnswer(expected, active.options.caseSensitive)) {
-      itemHadError.current = true; setFlashError(true); setTimeout(() => setFlashError(false), 180); return;
+
+  function sameCharacter(actual: string, expected: string) {
+    const left = actual.normalize('NFC'); const right = expected.normalize('NFC');
+    return active.options.caseSensitive ? left === right : left.toLocaleLowerCase() === right.toLocaleLowerCase();
+  }
+
+  function processCharacters(value: string) {
+    if (!item || !value) return;
+    const target = splitGraphemes(item.term); const accepted = splitGraphemes(typed); const incoming = splitGraphemes(value);
+    let addedCorrect = 0; let addedErrors = 0;
+    for (const character of incoming) {
+      const expected = target[accepted.length];
+      if (expected !== undefined && sameCharacter(character, expected)) { accepted.push(character); addedCorrect += 1; }
+      else { addedErrors += 1; itemHadError.current = true; }
     }
-    setCorrectKeys((count) => count + splitGraphemes(added).length); setTyped(value);
-    if (normalizeAnswer(value, active.options.caseSensitive) === normalizeAnswer(item.term, active.options.caseSensitive)) {
-      const duration = Math.max(200, Date.now() - started.current), nextDurations = [...durations, duration], nextWrong = itemHadError.current ? [...wrongItems, item] : wrongItems, nextIndex = index + 1;
-      setDurations(nextDurations); setWrongItems(nextWrong); setTyped(''); itemHadError.current = false;
-      if (nextIndex >= items.length) {
-        const keyTotal = totalKeys + splitGraphemes(added).length, keyCorrect = correctKeys + splitGraphemes(added).length, sum = nextDurations.reduce((a, b) => a + b, 0);
-        void onFinish({ accuracy: keyTotal ? keyCorrect / keyTotal : 1, averageItemMs: sum / items.length, itemsPerMinute: items.length / (sum / 60000), correctCount: items.length - nextWrong.length, totalCount: items.length, wrongItems: nextWrong });
-      } else { setIndex(nextIndex); started.current = Date.now(); }
-    }
+    const nextTotalKeys = totalKeys + incoming.length; const nextCorrectKeys = correctKeys + addedCorrect; const nextTyped = accepted.join('');
+    setTotalKeys(nextTotalKeys); setCorrectKeys(nextCorrectKeys); setTyped(nextTyped);
+    if (addedErrors) { setFlashError(true); window.setTimeout(() => setFlashError(false), 180); }
+    if (accepted.length !== target.length) return;
+
+    const duration = Math.max(200, Date.now() - started.current), nextDurations = [...durations, duration], nextWrong = itemHadError.current ? [...wrongItems, item] : wrongItems, nextIndex = index + 1;
+    setDurations(nextDurations); setWrongItems(nextWrong); setTyped(''); itemHadError.current = false;
+    if (nextIndex >= items.length) {
+      const sum = nextDurations.reduce((a, b) => a + b, 0);
+      void onFinish({ accuracy: nextTotalKeys ? nextCorrectKeys / nextTotalKeys : 1, averageItemMs: sum / items.length, itemsPerMinute: items.length / (sum / 60000), correctCount: items.length - nextWrong.length, totalCount: items.length, wrongItems: nextWrong });
+    } else { setIndex(nextIndex); started.current = Date.now(); }
+  }
+
+  function removeLastCharacter() { setTyped((value) => splitGraphemes(value).slice(0, -1).join('')); }
+
+  useEffect(() => {
+    input.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.key === 'Process' || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === 'Backspace') { event.preventDefault(); removeLastCharacter(); return; }
+      if (splitGraphemes(event.key).length === 1) { event.preventDefault(); processCharacters(event.key); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  function handleInput(value: string) {
+    if (composing.current) return;
+    if (value.length < typed.length) { removeLastCharacter(); return; }
+    processCharacters(value.slice(typed.length));
   }
   const targetChars = splitGraphemes(item.term), typedLength = splitGraphemes(typed).length, currentKey = targetChars[typedLength]?.toUpperCase();
-  return <main className="practice-page typing-page"><PracticeHeader label={active.scope.label} index={index} total={items.length} accuracy={accuracy} metric={speed ? `${speed.toFixed(1)}/分` : '—'} onExit={onExit} /><div className="practice-progress"><span style={{ width: `${(index / items.length) * 100}%` }} /></div><section className="typing-stage"><div className="word-stream">{items.map((entry, wordIndex) => <span key={`${entry.id}-${wordIndex}`} className={wordIndex < index ? 'done' : wordIndex === index ? `current ${flashError ? 'error' : ''}` : ''}>{entry.term}</span>)}</div>{active.options.contentMode === 'TERM_WITH_MEANING' && <p className="typing-meaning">{item.meaning}</p>}<div className={`type-input-wrap ${flashError ? 'error' : ''}`}><span aria-hidden="true">{targetChars.map((char, charIndex) => <i key={`${char}-${charIndex}`} className={charIndex < typedLength ? 'typed' : charIndex === typedLength ? 'cursor' : ''}>{char === ' ' ? '·' : char}</i>)}</span><input ref={input} value={typed} onChange={(event) => { if (!composing.current) process(event.target.value); }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={(event) => { composing.current = false; process(event.currentTarget.value); }} autoCapitalize="off" autoComplete="off" spellCheck={false} aria-label={`输入 ${item.term}`} /></div><p className="typing-hint">直接开始输入 · 错误按键会标红，但不会打断节奏</p><div className="keyboard" aria-hidden="true">{keyRows.map((row) => <div key={row}>{Array.from(row).map((key) => <span key={key} className={key === currentKey ? 'active' : ''}>{key}</span>)}</div>)}<div><span className="space-key">SPACE</span></div></div></section></main>;
+  return <main className="practice-page typing-page" onClick={() => input.current?.focus()}><PracticeHeader label={active.scope.label} index={index} total={items.length} accuracy={accuracy} metric={speed ? `${speed.toFixed(1)}/分` : '—'} onExit={onExit} /><div className="practice-progress"><span style={{ width: `${(index / items.length) * 100}%` }} /></div><section className="typing-stage"><div className="word-stream">{items.map((entry, wordIndex) => <span key={`${entry.id}-${wordIndex}`} className={wordIndex < index ? 'done' : wordIndex === index ? `current ${flashError ? 'error' : ''}` : ''}>{entry.term}</span>)}</div>{active.options.contentMode === 'TERM_WITH_MEANING' && <p className="typing-meaning">{item.meaning}</p>}<div className={`type-input-wrap ${flashError ? 'error' : ''}`}><span aria-hidden="true">{targetChars.map((char, charIndex) => <i key={`${char}-${charIndex}`} className={charIndex < typedLength ? 'typed' : charIndex === typedLength ? 'cursor' : ''}>{char === ' ' ? '·' : char}</i>)}</span><input ref={input} value={typed} onChange={(event) => handleInput(event.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={(event) => { composing.current = false; processCharacters(event.data); }} autoCapitalize="off" autoComplete="off" spellCheck={false} inputMode="text" aria-label={`输入 ${item.term}`} /></div><p className="typing-hint">键盘已连接 · 直接输入，或点击下方按键</p><div className="keyboard" aria-label="屏幕键盘">{keyRows.map((row) => <div key={row}>{Array.from(row).map((key) => <button type="button" key={key} className={key === currentKey ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => processCharacters(key)} aria-label={`输入字母 ${key}`}>{key}</button>)}</div>)}<div><button type="button" className={`space-key ${currentKey === ' ' ? 'active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => processCharacters(' ')} aria-label="输入空格">SPACE</button></div></div></section></main>;
 }
 
 function DictationPractice({ active, onExit, onFinish }: { active: ActivePractice; onExit: () => void; onFinish: (result: PracticeResult) => void }) {
