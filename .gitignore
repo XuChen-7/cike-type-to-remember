@@ -25,6 +25,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+.cike-local-server.log
+.cike-local-server.pid
 
 # local environment
 .env*
@@ -37,3 +39,7 @@ next-env.d.ts
 /outputs/
 /work/
 *.tsbuildinfo
+
+# local release output
+/.release-work/
+/artifacts/

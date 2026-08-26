@@ -1,0 +1,81 @@
+#!/bin/zsh
+
+set -u
+
+user_home="${CIKE_USER_HOME:-$HOME}"
+support_dir="$user_home/Library/Application Support/词刻"
+project_dir="$support_dir/site"
+node_bin="$support_dir/runtime/node"
+log_file="$support_dir/词刻运行日志.log"
+pid_file="$support_dir/词刻服务.pid"
+port="${CIKE_PORT:-3000}"
+url="http://127.0.0.1:$port/"
+
+show_dialog() {
+  if [[ "${CIKE_NONINTERACTIVE:-0}" != "1" ]]; then
+    /usr/bin/osascript -e "display dialog \"$1\" buttons {\"好\"} default button 1 with title \"词刻\"" >/dev/null 2>&1 || true
+  fi
+}
+
+open_site() {
+  if [[ "${CIKE_NO_OPEN:-0}" != "1" ]]; then
+    /usr/bin/open "$url"
+  fi
+}
+
+is_ready() {
+  /usr/bin/curl -fsS --max-time 2 "$url" 2>/dev/null | /usr/bin/grep -q '词刻'
+}
+
+if [[ ! "$port" =~ '^[0-9]+$' ]]; then
+  show_dialog "启动失败：端口设置无效。"
+  exit 1
+fi
+
+if is_ready; then
+  open_site
+  exit 0
+fi
+
+if /usr/bin/curl -sS --max-time 2 "$url" >/dev/null 2>&1; then
+  show_dialog "无法启动词刻：本机的 $port 端口已被其他程序使用。"
+  exit 1
+fi
+
+if [[ ! -d "$project_dir" || ! -f "$project_dir/package.json" ]]; then
+  show_dialog "启动失败：网站文件不完整，请重新运行安装程序。"
+  exit 1
+fi
+
+if [[ ! -x "$node_bin" || ! -f "$project_dir/node_modules/vinext/dist/cli.js" ]]; then
+  show_dialog "启动失败：运行环境不完整，请重新运行安装程序。"
+  exit 1
+fi
+
+/bin/mkdir -p "$support_dir"
+cd "$project_dir" || exit 1
+
+/usr/bin/nohup /usr/bin/env \
+  PATH="${node_bin:h}:/usr/bin:/bin:/usr/sbin:/sbin" \
+  BROWSER=none \
+  "$node_bin" "$project_dir/node_modules/vinext/dist/cli.js" \
+  dev --host 127.0.0.1 --port "$port" \
+  >>"$log_file" 2>&1 </dev/null &
+server_pid=$!
+/bin/echo "$server_pid" > "$pid_file"
+
+for attempt in {1..180}; do
+  if is_ready; then
+    open_site
+    exit 0
+  fi
+
+  if ! /bin/kill -0 "$server_pid" 2>/dev/null; then
+    break
+  fi
+
+  /bin/sleep 0.5
+done
+
+show_dialog "词刻未能成功启动。请重新打开；如果仍然失败，可查看“词刻运行日志.log”。"
+exit 1

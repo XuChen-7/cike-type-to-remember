@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 type Card = { id: string; name: string; color: string; cover_type: 'COLOR' | 'IMAGE'; cover_value: string | null; folder_count: number; entry_count: number };
 type Folder = { id: string; card_id: string; name: string };
@@ -24,8 +24,30 @@ function splitGraphemes(value: string) {
 }
 
 function normalizeAnswer(value: string, caseSensitive: boolean) {
-  const normalized = value.trim().normalize('NFC').replace(/\s+/g, ' ');
+  const normalized = value
+    .normalize('NFKC')
+    .replace(/[\u00AD\u200B\u2060\uFEFF]/g, '')
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[‐‑‒–—―]/g, '-')
+    .trim()
+    .replace(/\s+/g, ' ');
   return caseSensitive ? normalized : normalized.toLocaleLowerCase();
+}
+
+function describeAnswerDifference(answer: string, target: string, caseSensitive: boolean) {
+  const actual = splitGraphemes(normalizeAnswer(answer, caseSensitive));
+  const expected = splitGraphemes(normalizeAnswer(target, caseSensitive));
+  const length = Math.max(actual.length, expected.length);
+  for (let index = 0; index < length; index += 1) {
+    if (actual[index] === expected[index]) continue;
+    if (actual[index] === undefined) return `从第 ${index + 1} 个字符开始缺少内容`;
+    if (expected[index] === undefined) return `从第 ${index + 1} 个字符开始多输入了内容`;
+    const shownActual = actual[index] === ' ' ? '空格' : `“${actual[index]}”`;
+    const shownExpected = expected[index] === ' ' ? '空格' : `“${expected[index]}”`;
+    return `第 ${index + 1} 个字符不同：输入了${shownActual}，应为${shownExpected}`;
+  }
+  return '答案只存在可忽略的格式差异';
 }
 
 function shuffle<T>(values: T[]) {
@@ -151,7 +173,9 @@ function LibraryView({ data, search, onSearch, onCreate, onOpen, onEdit, onDelet
 
 function SubjectCard({ card, index, onOpen, onEdit, onDelete }: { card: Card; index: number; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
   const [menu, setMenu] = useState(false);
-  return <article className="subject-card" style={{ '--accent': card.color, '--tint': tint(card.color) } as React.CSSProperties}><button className="card-main" onClick={onOpen}><div className={`cover cover-${index % 3 + 1}`} style={card.cover_type === 'IMAGE' && card.cover_value ? { backgroundImage: `linear-gradient(180deg, transparent, ${card.color}55), url(${card.cover_value})` } : undefined}><span className="cover-mark">{card.name.slice(0, 2)}</span><span className="cover-label">SUBJECT {String(index + 1).padStart(2, '0')}</span></div><div className="card-body"><div className="card-title-row"><h3>{card.name}</h3><span className="card-arrow">↗</span></div><p>{card.folder_count} 个文件夹 <span>·</span> {card.entry_count} 个词条</p><div className="card-meta"><span>{card.entry_count ? '可以开始练习' : '等待添加词条'}</span><span className="practice-link">打开科目 →</span></div></div></button><button className="card-menu" onClick={() => setMenu(!menu)} aria-label="更多操作">•••</button>{menu && <div className="mini-menu"><button onClick={onEdit}>编辑卡片</button><button className="danger" onClick={onDelete}>删除卡片</button></div>}</article>;
+  const titleLength = Array.from(card.name).length;
+  const coverTitleSize = titleLength <= 6 ? 51 : titleLength <= 14 ? 38 : titleLength <= 28 ? 28 : titleLength <= 48 ? 22 : 17;
+  return <article className="subject-card" style={{ '--accent': card.color, '--tint': tint(card.color) } as React.CSSProperties}><button className="card-main" onClick={onOpen}><div className={`cover cover-${index % 3 + 1}`} style={card.cover_type === 'IMAGE' && card.cover_value ? { backgroundImage: `linear-gradient(180deg, transparent, ${card.color}55), url(${card.cover_value})` } : undefined}><span className="cover-mark" style={{ fontSize: coverTitleSize }}>{card.name}</span><span className="cover-label">SUBJECT {String(index + 1).padStart(2, '0')}</span></div><div className="card-body"><div className="card-title-row"><h3>{card.name}</h3><span className="card-arrow">↗</span></div><p>{card.folder_count} 个文件夹 <span>·</span> {card.entry_count} 个词条</p><div className="card-meta"><span>{card.entry_count ? '可以开始练习' : '等待添加词条'}</span><span className="practice-link">打开科目 →</span></div></div></button><button className="card-menu" onClick={() => setMenu(!menu)} aria-label="更多操作">•••</button>{menu && <div className="mini-menu"><button onClick={onEdit}>编辑卡片</button><button className="danger" onClick={onDelete}>删除卡片</button></div>}</article>;
 }
 
 function CardView({ card, folders, entries, onBack, onCreate, onOpen, onEdit, onDelete, onPractice }: { card: Card; folders: Folder[]; entries: Entry[]; onBack: () => void; onCreate: () => void; onOpen: (id: string) => void; onEdit: (folder: Folder) => void; onDelete: (folder: Folder) => void; onPractice: () => void }) {
@@ -218,7 +242,7 @@ function PracticeHeader({ label, index, total, accuracy, metric, onExit, round }
 }
 
 function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; onExit: () => void; onFinish: (result: PracticeResult) => void }) {
-  const baseItems = active.scope.entries; const [roundItems, setRoundItems] = useState(baseItems); const [round, setRound] = useState(1); const [index, setIndex] = useState(0); const [completedCount, setCompletedCount] = useState(0); const [failedAttempts, setFailedAttempts] = useState(0); const [typed, setTyped] = useState(''); const [totalKeys, setTotalKeys] = useState(0); const [correctKeys, setCorrectKeys] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const [flashError, setFlashError] = useState(false); const started = useRef(Date.now()); const itemHadError = useRef(false); const input = useRef<HTMLInputElement>(null); const composing = useRef(false);
+  const baseItems = active.scope.entries; const [roundItems, setRoundItems] = useState(baseItems); const [round, setRound] = useState(1); const [index, setIndex] = useState(0); const [pageStart, setPageStart] = useState(0); const [completedCount, setCompletedCount] = useState(0); const [failedAttempts, setFailedAttempts] = useState(0); const [typed, setTyped] = useState(''); const [totalKeys, setTotalKeys] = useState(0); const [correctKeys, setCorrectKeys] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const [flashError, setFlashError] = useState(false); const started = useRef(Date.now()); const itemHadError = useRef(false); const input = useRef<HTMLInputElement>(null); const stream = useRef<HTMLDivElement>(null); const currentWord = useRef<HTMLSpanElement>(null); const composing = useRef(false);
   const item = roundItems[index]; const activeMs = durations.reduce((sum, value) => sum + value, 0) + (item ? Date.now() - started.current : 0); const speed = completedCount && activeMs ? completedCount / (activeMs / 60000) : 0; const accuracy = totalKeys ? correctKeys / totalKeys : 1;
 
   function sameCharacter(actual: string, expected: string) {
@@ -242,7 +266,7 @@ function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; 
 
     const attemptFailed = itemHadError.current, duration = Math.max(200, Date.now() - started.current), nextDurations = [...durations, duration], nextWrong = attemptFailed && !wrongItems.some((entry) => entry.id === item.id) ? [...wrongItems, item] : wrongItems, nextIndex = index + 1, nextCompletedCount = completedCount + 1, nextFailedAttempts = failedAttempts + (attemptFailed ? 1 : 0);
     setDurations(nextDurations); setWrongItems(nextWrong); setCompletedCount(nextCompletedCount); setFailedAttempts(nextFailedAttempts); setTyped(''); itemHadError.current = false;
-    if (nextIndex >= roundItems.length) { setIndex(0); setRound((value) => value + 1); setRoundItems(active.options.random ? shuffle(baseItems) : [...baseItems]); started.current = Date.now(); }
+    if (nextIndex >= roundItems.length) { setIndex(0); setPageStart(0); setRound((value) => value + 1); setRoundItems(active.options.random ? shuffle(baseItems) : [...baseItems]); started.current = Date.now(); }
     else { setIndex(nextIndex); started.current = Date.now(); }
   }
 
@@ -250,6 +274,12 @@ function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; 
 
   const processCharactersRef = useRef(processCharacters); processCharactersRef.current = processCharacters;
   useEffect(() => { input.current?.focus(); }, [index, round]);
+  useLayoutEffect(() => {
+    const streamElement = stream.current, currentElement = currentWord.current;
+    if (!streamElement || !currentElement) return;
+    const streamRect = streamElement.getBoundingClientRect(), currentRect = currentElement.getBoundingClientRect();
+    if (currentRect.top < streamRect.top - 1 || currentRect.bottom > streamRect.bottom + 1) setPageStart(index);
+  }, [index, pageStart, round, roundItems]);
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.isComposing || event.key === 'Process' || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -271,22 +301,26 @@ function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; 
     void onFinish({ accuracy: totalKeys ? correctKeys / totalKeys : 1, averageItemMs: sum / completedCount, itemsPerMinute: completedCount / (sum / 60000), correctCount: completedCount - failedAttempts, totalCount: completedCount, wrongItems });
   }
   const targetChars = splitGraphemes(item.term), typedLength = splitGraphemes(typed).length, currentKey = targetChars[typedLength]?.toUpperCase();
-  return <main className="practice-page typing-page" onClick={() => input.current?.focus()}><PracticeHeader label={active.scope.label} index={index} total={roundItems.length} round={round} accuracy={accuracy} metric={speed ? `${speed.toFixed(1)}/分` : '—'} onExit={stopPractice} /><div className="practice-progress"><span style={{ width: `${(index / roundItems.length) * 100}%` }} /></div><section className="typing-stage"><div className="word-stream">{roundItems.map((entry, wordIndex) => <span key={`${entry.id}-${wordIndex}`} className={wordIndex < index ? 'done' : wordIndex === index ? `current ${flashError ? 'error' : ''}` : ''}>{entry.term}</span>)}</div>{active.options.contentMode === 'TERM_WITH_MEANING' && <p className="typing-meaning">{item.meaning}</p>}<div className={`type-input-wrap ${flashError ? 'error' : ''}`}><span aria-hidden="true">{targetChars.map((char, charIndex) => <i key={`${char}-${charIndex}`} className={charIndex < typedLength ? 'typed' : charIndex === typedLength ? 'cursor' : ''}>{char === ' ' ? '·' : char}</i>)}</span><input ref={input} value={typed} onChange={(event) => handleInput(event.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={(event) => { composing.current = false; processCharacters(event.data); }} autoCapitalize="off" autoComplete="off" spellCheck={false} inputMode="text" aria-label={`输入 ${item.term}`} /></div><p className="typing-hint">第 {round} 轮 · 已完成 {completedCount} 次 · 本轮完成后自动继续</p><div className="keyboard" aria-label="屏幕键盘">{keyRows.map((row) => <div key={row}>{Array.from(row).map((key) => <button type="button" key={key} className={key === currentKey ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => processCharacters(key)} aria-label={`输入字母 ${key}`}>{key}</button>)}</div>)}<div><button type="button" className={`space-key ${currentKey === ' ' ? 'active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => processCharacters(' ')} aria-label="输入空格">SPACE</button></div></div></section></main>;
+  const pageItems = roundItems.slice(pageStart);
+  return <main className="practice-page typing-page" onClick={() => input.current?.focus()}><PracticeHeader label={active.scope.label} index={index} total={roundItems.length} round={round} accuracy={accuracy} metric={speed ? `${speed.toFixed(1)}/分` : '—'} onExit={stopPractice} /><div className="practice-progress"><span style={{ width: `${(index / roundItems.length) * 100}%` }} /></div><section className="typing-stage"><div className="word-stream" ref={stream} key={`${round}-${pageStart}`}>{pageItems.map((entry, pageIndex) => { const wordIndex = pageStart + pageIndex; return <span ref={wordIndex === index ? currentWord : undefined} key={`${entry.id}-${wordIndex}`} className={wordIndex < index ? 'done' : wordIndex === index ? `current ${flashError ? 'error' : ''}` : ''}>{entry.term}</span>; })}</div>{active.options.contentMode === 'TERM_WITH_MEANING' && <p className="typing-meaning">{item.meaning}</p>}<div className={`type-input-wrap ${flashError ? 'error' : ''}`}><span aria-hidden="true">{targetChars.map((char, charIndex) => <i key={`${char}-${charIndex}`} className={charIndex < typedLength ? 'typed' : charIndex === typedLength ? 'cursor' : ''}>{char === ' ' ? '·' : char}</i>)}</span><input ref={input} value={typed} onChange={(event) => handleInput(event.target.value)} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={(event) => { composing.current = false; processCharacters(event.data); }} autoCapitalize="off" autoComplete="off" spellCheck={false} inputMode="text" aria-label={`输入 ${item.term}`} /></div><p className="typing-hint">第 {round} 轮 · 已完成 {completedCount} 次 · 本轮完成后自动继续</p><div className="keyboard" aria-label="屏幕键盘">{keyRows.map((row) => <div key={row}>{Array.from(row).map((key) => <button type="button" key={key} className={key === currentKey ? 'active' : ''} onMouseDown={(event) => event.preventDefault()} onClick={() => processCharacters(key)} aria-label={`输入字母 ${key}`}>{key}</button>)}</div>)}<div><button type="button" className={`space-key ${currentKey === ' ' ? 'active' : ''}`} onMouseDown={(event) => event.preventDefault()} onClick={() => processCharacters(' ')} aria-label="输入空格">SPACE</button></div></div></section></main>;
 }
 
 function DictationPractice({ active, onExit, onFinish }: { active: ActivePractice; onExit: () => void; onFinish: (result: PracticeResult) => void }) {
-  const items = active.scope.entries; const [index, setIndex] = useState(0); const [answer, setAnswer] = useState(''); const [submitted, setSubmitted] = useState(false); const [wasCorrect, setWasCorrect] = useState(false); const [correctCount, setCorrectCount] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const started = useRef(Date.now()); const input = useRef<HTMLInputElement>(null); const item = items[index]; const chars = splitGraphemes(item.term); const answerChars = splitGraphemes(answer); const average = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+  const items = active.scope.entries; const [index, setIndex] = useState(0); const [answer, setAnswer] = useState(''); const [submittedAnswer, setSubmittedAnswer] = useState(''); const [submitted, setSubmitted] = useState(false); const [wasCorrect, setWasCorrect] = useState(false); const [correctCount, setCorrectCount] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const started = useRef(Date.now()); const input = useRef<HTMLInputElement>(null); const item = items[index]; const chars = splitGraphemes(item.term); const answerChars = splitGraphemes(answer); const reviewChars = submitted && !wasCorrect ? splitGraphemes(submittedAnswer) : chars; const average = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
   useEffect(() => { input.current?.focus(); }, [index, submitted]);
   function submit(event?: FormEvent) {
-    event?.preventDefault(); if (!answer.trim() || submitted) return;
-    const correct = normalizeAnswer(answer, active.options.caseSensitive) === normalizeAnswer(item.term, active.options.caseSensitive); setWasCorrect(correct); setSubmitted(true); if (correct) setCorrectCount((count) => count + 1); else setWrongItems((items) => [...items, item]);
+    event?.preventDefault();
+    const currentAnswer = input.current?.value ?? answer;
+    if (!normalizeAnswer(currentAnswer, active.options.caseSensitive) || submitted) return;
+    const correct = normalizeAnswer(currentAnswer, active.options.caseSensitive) === normalizeAnswer(item.term, active.options.caseSensitive);
+    setAnswer(currentAnswer); setSubmittedAnswer(currentAnswer); setWasCorrect(correct); setSubmitted(true); if (correct) setCorrectCount((count) => count + 1); else setWrongItems((items) => [...items, item]);
   }
   function next() {
     const duration = Math.max(200, Date.now() - started.current), nextDurations = [...durations, duration], nextWrong = wasCorrect ? wrongItems : [...wrongItems], nextCorrect = correctCount;
     if (index + 1 >= items.length) { const sum = nextDurations.reduce((a, b) => a + b, 0); void onFinish({ accuracy: nextCorrect / items.length, averageItemMs: sum / items.length, itemsPerMinute: items.length / (sum / 60000), correctCount: nextCorrect, totalCount: items.length, wrongItems: nextWrong }); return; }
-    setDurations(nextDurations); setIndex(index + 1); setAnswer(''); setSubmitted(false); setWasCorrect(false); started.current = Date.now();
+    setDurations(nextDurations); setIndex(index + 1); setAnswer(''); setSubmittedAnswer(''); setSubmitted(false); setWasCorrect(false); started.current = Date.now();
   }
-  return <main className="practice-page dictation-page"><PracticeHeader label={active.scope.label} index={index} total={items.length} accuracy={index ? correctCount / index : 1} metric={average ? seconds(average) : '—'} onExit={onExit} /><div className="practice-progress"><span style={{ width: `${(index / items.length) * 100}%` }} /></div><section className="dictation-stage"><p className="dictation-label">根据释义写出词条</p><h1>{item.meaning}</h1><form onSubmit={submit}><div className={`answer-slots ${submitted ? (wasCorrect ? 'correct' : 'wrong') : ''}`} onClick={() => input.current?.focus()}>{chars.map((char, charIndex) => char === ' ' ? <span className="slot gap" key={charIndex} /> : /[\p{P}\p{S}]/u.test(char) ? <span className="slot punctuation" key={charIndex}>{char}</span> : <span className="slot" key={charIndex}>{submitted && !wasCorrect ? splitGraphemes(item.term)[charIndex] : answerChars[charIndex] ?? ''}</span>)}</div><input ref={input} className="dictation-input" value={answer} onChange={(event) => setAnswer(event.target.value)} disabled={submitted} autoCapitalize="off" autoComplete="off" spellCheck={false} aria-label="默写答案" />{submitted ? <div className={`answer-feedback ${wasCorrect ? 'correct' : 'wrong'}`}><strong>{wasCorrect ? '回答正确' : '再记一次'}</strong>{!wasCorrect && <p>正确答案：<b>{item.term}</b></p>}<button className="button button-primary" type="button" onClick={next}>{index + 1 === items.length ? '查看结果' : '下一题 →'}</button></div> : <><button className="button button-primary dictation-submit" type="submit" disabled={!answer.trim()}>提交答案</button><p className="typing-hint">输入后按 Enter 提交</p></>}</form></section></main>;
+  return <main className="practice-page dictation-page"><PracticeHeader label={active.scope.label} index={index} total={items.length} accuracy={index ? correctCount / index : 1} metric={average ? seconds(average) : '—'} onExit={onExit} /><div className="practice-progress"><span style={{ width: `${(index / items.length) * 100}%` }} /></div><section className="dictation-stage"><p className="dictation-label">根据释义写出词条</p><h1>{item.meaning}</h1><form onSubmit={submit}><div className={`answer-slots ${submitted ? (wasCorrect ? 'correct' : 'wrong') : ''}`} onClick={() => input.current?.focus()}>{reviewChars.map((char, charIndex) => char === ' ' ? <span className="slot gap" key={charIndex} /> : /[\p{P}\p{S}]/u.test(char) ? <span className="slot punctuation" key={charIndex}>{char}</span> : <span className="slot" key={charIndex}>{submitted && !wasCorrect ? char : answerChars[charIndex] ?? ''}</span>)}</div><input ref={input} className="dictation-input" value={answer} onChange={(event) => setAnswer(event.target.value)} disabled={submitted} autoCapitalize="off" autoComplete="off" spellCheck={false} aria-label="默写答案" />{submitted ? <div className={`answer-feedback ${wasCorrect ? 'correct' : 'wrong'}`}><strong>{wasCorrect ? '回答正确' : '再记一次'}</strong>{!wasCorrect && <div className="answer-comparison"><p>你的答案：<b>{submittedAnswer}</b></p><p>正确答案：<b>{item.term}</b></p><small>{describeAnswerDifference(submittedAnswer, item.term, active.options.caseSensitive)}</small></div>}<button className="button button-primary" type="button" onClick={next}>{index + 1 === items.length ? '查看结果' : '下一题 →'}</button></div> : <><button className="button button-primary dictation-submit" type="submit" disabled={!normalizeAnswer(answer, active.options.caseSensitive)}>提交答案</button><p className="typing-hint">输入后按 Enter 提交</p></>}</form></section></main>;
 }
 
 function ResultView({ active, result, previous, onExit, onRetry }: { active: ActivePractice; result: PracticeResult; previous?: Session; onExit: () => void; onRetry: (items: Entry[]) => void }) {
