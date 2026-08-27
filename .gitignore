@@ -43,3 +43,4 @@ next-env.d.ts
 # local release output
 /.release-work/
 /artifacts/
+/版本安装包/

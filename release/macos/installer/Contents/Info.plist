@@ -24,6 +24,14 @@
   <string>0.0.0</string>
   <key>LSMinimumSystemVersion</key>
   <string>12.0</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array>
+    <string>MacOSX</string>
+  </array>
+  <key>LSArchitecturePriority</key>
+  <array>
+    <string>arm64</string>
+  </array>
   <key>LSUIElement</key>
   <true/>
 </dict>

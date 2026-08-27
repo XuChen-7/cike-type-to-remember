@@ -27,7 +27,7 @@ fail() {
   exit 1
 }
 
-[[ "$(/usr/bin/uname -m)" == "arm64" ]] || fail "这个安装包仅支持 Apple 芯片的 Mac（M1/M2/M3/M4 等）。"
+[[ "$(/usr/bin/uname -m)" == "arm64" ]] || fail "这个安装包支持所有 Apple Silicon Mac（M1–M5 及 Pro/Max/Ultra 机型），但当前系统未以 arm64 模式运行。"
 [[ -n "$version" ]] || fail "安装包不完整：找不到版本号。"
 [[ -d "$payload_dir/site" ]] || fail "安装包不完整：找不到网站文件。"
 [[ -x "$payload_dir/runtime/node" ]] || fail "安装包不完整：找不到运行环境。"

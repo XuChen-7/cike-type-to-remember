@@ -23,12 +23,12 @@ payload_dir="$resources_dir/payload"
 payload_site="$payload_dir/site"
 launcher_app="$payload_dir/词刻.app"
 artifact_dir="$project_root/artifacts"
-artifact_name="词刻本地版_Apple芯片_v$version.zip"
+artifact_name="Cike-macOS-Apple-Silicon-v$version.zip"
 artifact_path="$artifact_dir/$artifact_name"
 checksum_path="$artifact_path.sha256"
 node_bin="${CIKE_NODE_BIN:-$(command -v node)}"
 
-[[ "$(/usr/bin/uname -m)" == "arm64" ]] || { print -u2 "Release builds require an Apple Silicon Mac."; exit 69; }
+[[ "$(/usr/bin/uname -m)" == "arm64" ]] || { print -u2 "Release builds require an arm64 Apple Silicon Mac (M1-M5, including Pro/Max/Ultra)."; exit 69; }
 [[ -x "$node_bin" ]] || { print -u2 "Node.js is missing."; exit 69; }
 /usr/bin/file "$node_bin" | /usr/bin/grep -q 'arm64' || { print -u2 "Node.js must contain an arm64 executable."; exit 69; }
 [[ -d "$project_root/node_modules" ]] || { print -u2 "node_modules is missing; run npm ci first."; exit 69; }
