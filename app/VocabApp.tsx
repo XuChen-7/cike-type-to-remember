@@ -50,6 +50,23 @@ function describeAnswerDifference(answer: string, target: string, caseSensitive:
   return '答案只存在可忽略的格式差异';
 }
 
+function filterDictationAnswer(value: string, target: string) {
+  const targetChars = splitGraphemes(target);
+  const accepted: string[] = [];
+  for (const char of splitGraphemes(value)) {
+    const expected = targetChars[accepted.length];
+    const typedSpace = /\s/u.test(char);
+    const expectedSpace = expected !== undefined && /\s/u.test(expected);
+    if (typedSpace) {
+      if (expectedSpace) accepted.push(' ');
+      continue;
+    }
+    if (expectedSpace) continue;
+    accepted.push(char);
+  }
+  return accepted.join('');
+}
+
 function shuffle<T>(values: T[]) {
   const copy = [...values];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -159,16 +176,16 @@ export default function VocabApp() {
 }
 
 function LoadingState({ error, onRetry }: { error: string; onRetry: () => void }) {
-  return <main className="loading-page"><div className="loading-logo">刻</div><h1>正在铺开你的词条空间</h1>{error ? <><p>{error}</p><button className="button button-primary" onClick={onRetry}>重新载入</button></> : <div className="loading-bar"><span /></div>}</main>;
+  return <main className="loading-page"><div className="loading-logo">键</div><h1>正在打开你的知识库</h1>{error ? <><p>{error}</p><button className="button button-primary" onClick={onRetry}>重新载入</button></> : <div className="loading-bar"><span /></div>}</main>;
 }
 
 function AppHeader({ active, onLibrary, onHistory, onSettings }: { active: 'library' | 'history'; onLibrary: () => void; onHistory: () => void; onSettings: () => void }) {
-  return <header className="topbar"><button className="brand bare-button" onClick={onLibrary}><span className="brand-mark">刻</span><span><strong>词刻</strong><small>TYPE TO REMEMBER</small></span></button><nav className="topnav" aria-label="主导航"><button className={active === 'library' ? 'active' : ''} onClick={onLibrary}>内容库</button><button className={active === 'history' ? 'active' : ''} onClick={onHistory}>练习记录</button></nav><button className="settings-button" type="button" onClick={onSettings}>设置</button></header>;
+  return <header className="topbar"><button className="brand bare-button" onClick={onLibrary}><span className="brand-mark">键</span><span><strong>键记</strong><small>打出来，记得住</small></span></button><nav className="topnav" aria-label="主导航"><button className={active === 'library' ? 'active' : ''} onClick={onLibrary}>内容库</button><button className={active === 'history' ? 'active' : ''} onClick={onHistory}>练习记录</button></nav><button className="settings-button" type="button" onClick={onSettings}>设置</button></header>;
 }
 
 function LibraryView({ data, search, onSearch, onCreate, onOpen, onEdit, onDelete, onPractice }: { data: AppState; search: string; onSearch: (value: string) => void; onCreate: () => void; onOpen: (id: string) => void; onEdit: (card: Card) => void; onDelete: (card: Card) => void; onPractice: () => void }) {
   const cards = data.cards.filter((card) => card.name.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
-  return <><section className="hero"><div><p className="eyebrow">你的词条空间</p><h1>把每一次敲击，<br />变成更深的记忆。</h1><p className="hero-copy">按科目整理词条，在节奏里熟悉拼写，在提示中完成默写。</p></div><div className="hero-actions"><button className="button button-secondary" onClick={onCreate}>＋ 新建科目</button><button className="button button-primary" onClick={onPractice} disabled={!data.entries.length}>开始全部练习 <span>→</span></button></div></section><section className="library-section"><div className="section-heading"><div><h2>我的科目</h2><p>{data.cards.length} 个科目 · {data.entries.length} 个词条</p></div><label className="search-field"><span>⌕</span><input type="search" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索科目" aria-label="搜索科目" /></label></div><div className="subject-grid">{cards.map((card, index) => <SubjectCard key={card.id} card={card} index={index} onOpen={() => onOpen(card.id)} onEdit={() => onEdit(card)} onDelete={() => onDelete(card)} />)}<button className="new-card" onClick={onCreate}><span className="new-card-icon">＋</span><strong>新建科目卡片</strong><small>从一个新分类开始整理</small></button></div></section></>;
+  return <><section className="hero"><div><p className="eyebrow">键记 · 你的知识练习场</p><h1>打出来，<br />记得住。</h1><p className="hero-copy">把单词、术语和概念按科目整理，用连续打字与释义默写练到真正熟悉。</p></div><div className="hero-actions"><button className="button button-secondary" onClick={onCreate}>＋ 新建科目</button><button className="button button-primary" onClick={onPractice} disabled={!data.entries.length}>开始全部练习 <span>→</span></button></div></section><section className="library-section"><div className="section-heading"><div><h2>我的科目</h2><p>{data.cards.length} 个科目 · {data.entries.length} 个词条</p></div><label className="search-field"><span>⌕</span><input type="search" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索科目" aria-label="搜索科目" /></label></div><div className="subject-grid">{cards.map((card, index) => <SubjectCard key={card.id} card={card} index={index} onOpen={() => onOpen(card.id)} onEdit={() => onEdit(card)} onDelete={() => onDelete(card)} />)}<button className="new-card" onClick={onCreate}><span className="new-card-icon">＋</span><strong>新建科目卡片</strong><small>从一个新分类开始整理</small></button></div></section></>;
 }
 
 function SubjectCard({ card, index, onOpen, onEdit, onDelete }: { card: Card; index: number; onOpen: () => void; onEdit: () => void; onDelete: () => void }) {
@@ -196,7 +213,7 @@ function HistoryView({ sessions, onStart }: { sessions: Session[]; onStart: () =
 }
 
 function ModalShell({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: React.ReactNode }) {
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">词刻</p><h2>{title}</h2>{subtitle && <p className="modal-subtitle">{subtitle}</p>}{children}</section></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><button className="modal-close" onClick={onClose}>×</button><p className="eyebrow">键记</p><h2>{title}</h2>{subtitle && <p className="modal-subtitle">{subtitle}</p>}{children}</section></div>;
 }
 
 function CardModal({ card, busy, onClose, onSubmit }: { card: Card | null; busy: boolean; onClose: () => void; onSubmit: (payload: { id?: string; name: string; color: string; coverType: 'COLOR' | 'IMAGE'; coverValue: string | null }, file: File | null) => void }) {
@@ -238,7 +255,7 @@ function PracticeRun({ active, previousSessions, onExit, onSave, onRetry }: { ac
 }
 
 function PracticeHeader({ label, index, total, accuracy, metric, onExit, round }: { label: string; index: number; total: number; accuracy: number; metric: string; onExit: () => void; round?: number }) {
-  return <header className="practice-header"><button className="practice-brand" onClick={() => { if (confirm('结束当前练习？')) onExit(); }}>刻</button><div className="practice-scope"><small>正在练习</small><strong>{label}</strong></div><div className="metrics"><div><span>{round ? '循环进度' : '进度'}</span><strong>{round ? `第 ${round} 轮` : index}<small>{round ? ` · ${index}/${total}` : ` / ${total}`}</small></strong></div><div><span>正确率</span><strong>{Math.round(accuracy * 100)}<small>%</small></strong></div><div><span>平均速度</span><strong>{metric}</strong></div></div><button className="practice-exit" onClick={() => { if (confirm('结束当前练习？')) onExit(); }}>{round ? '结束' : '退出'}</button></header>;
+  return <header className="practice-header"><button className="practice-brand" onClick={() => { if (confirm('结束当前练习？')) onExit(); }}>键</button><div className="practice-scope"><small>正在练习</small><strong>{label}</strong></div><div className="metrics"><div><span>{round ? '循环进度' : '进度'}</span><strong>{round ? `第 ${round} 轮` : index}<small>{round ? ` · ${index}/${total}` : ` / ${total}`}</small></strong></div><div><span>正确率</span><strong>{Math.round(accuracy * 100)}<small>%</small></strong></div><div><span>平均速度</span><strong>{metric}</strong></div></div><button className="practice-exit" onClick={() => { if (confirm('结束当前练习？')) onExit(); }}>{round ? '结束' : '退出'}</button></header>;
 }
 
 function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; onExit: () => void; onFinish: (result: PracticeResult) => void }) {
@@ -306,8 +323,11 @@ function TypingPractice({ active, onExit, onFinish }: { active: ActivePractice; 
 }
 
 function DictationPractice({ active, onExit, onFinish }: { active: ActivePractice; onExit: () => void; onFinish: (result: PracticeResult) => void }) {
-  const items = active.scope.entries; const [index, setIndex] = useState(0); const [answer, setAnswer] = useState(''); const [submittedAnswer, setSubmittedAnswer] = useState(''); const [submitted, setSubmitted] = useState(false); const [wasCorrect, setWasCorrect] = useState(false); const [correctCount, setCorrectCount] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const started = useRef(Date.now()); const input = useRef<HTMLInputElement>(null); const item = items[index]; const chars = splitGraphemes(item.term); const answerChars = splitGraphemes(answer); const reviewChars = submitted && !wasCorrect ? splitGraphemes(submittedAnswer) : chars; const average = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
-  useEffect(() => { input.current?.focus(); }, [index, submitted]);
+  const items = active.scope.entries; const [index, setIndex] = useState(0); const [answer, setAnswer] = useState(''); const [submittedAnswer, setSubmittedAnswer] = useState(''); const [submitted, setSubmitted] = useState(false); const [wasCorrect, setWasCorrect] = useState(false); const [correctCount, setCorrectCount] = useState(0); const [durations, setDurations] = useState<number[]>([]); const [wrongItems, setWrongItems] = useState<Entry[]>([]); const started = useRef(Date.now()); const input = useRef<HTMLInputElement>(null); const nextButton = useRef<HTMLButtonElement>(null); const item = items[index]; const chars = splitGraphemes(item.term); const answerChars = splitGraphemes(answer); const hasGuidedCharacters = chars.some((char) => /\s/u.test(char) || /[\p{P}\p{S}]/u.test(char)); const average = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+  useEffect(() => {
+    if (submitted) nextButton.current?.focus();
+    else input.current?.focus();
+  }, [index, submitted]);
   function submit(event?: FormEvent) {
     event?.preventDefault();
     const currentAnswer = input.current?.value ?? answer;
@@ -320,7 +340,7 @@ function DictationPractice({ active, onExit, onFinish }: { active: ActivePractic
     if (index + 1 >= items.length) { const sum = nextDurations.reduce((a, b) => a + b, 0); void onFinish({ accuracy: nextCorrect / items.length, averageItemMs: sum / items.length, itemsPerMinute: items.length / (sum / 60000), correctCount: nextCorrect, totalCount: items.length, wrongItems: nextWrong }); return; }
     setDurations(nextDurations); setIndex(index + 1); setAnswer(''); setSubmittedAnswer(''); setSubmitted(false); setWasCorrect(false); started.current = Date.now();
   }
-  return <main className="practice-page dictation-page"><PracticeHeader label={active.scope.label} index={index} total={items.length} accuracy={index ? correctCount / index : 1} metric={average ? seconds(average) : '—'} onExit={onExit} /><div className="practice-progress"><span style={{ width: `${(index / items.length) * 100}%` }} /></div><section className="dictation-stage"><p className="dictation-label">根据释义写出词条</p><h1>{item.meaning}</h1><form onSubmit={submit}><div className={`answer-slots ${submitted ? (wasCorrect ? 'correct' : 'wrong') : ''}`} onClick={() => input.current?.focus()}>{reviewChars.map((char, charIndex) => char === ' ' ? <span className="slot gap" key={charIndex} /> : /[\p{P}\p{S}]/u.test(char) ? <span className="slot punctuation" key={charIndex}>{char}</span> : <span className="slot" key={charIndex}>{submitted && !wasCorrect ? char : answerChars[charIndex] ?? ''}</span>)}</div><input ref={input} className="dictation-input" value={answer} onChange={(event) => setAnswer(event.target.value)} disabled={submitted} autoCapitalize="off" autoComplete="off" spellCheck={false} aria-label="默写答案" />{submitted ? <div className={`answer-feedback ${wasCorrect ? 'correct' : 'wrong'}`}><strong>{wasCorrect ? '回答正确' : '再记一次'}</strong>{!wasCorrect && <div className="answer-comparison"><p>你的答案：<b>{submittedAnswer}</b></p><p>正确答案：<b>{item.term}</b></p><small>{describeAnswerDifference(submittedAnswer, item.term, active.options.caseSensitive)}</small></div>}<button className="button button-primary" type="button" onClick={next}>{index + 1 === items.length ? '查看结果' : '下一题 →'}</button></div> : <><button className="button button-primary dictation-submit" type="submit" disabled={!normalizeAnswer(answer, active.options.caseSensitive)}>提交答案</button><p className="typing-hint">输入后按 Enter 提交</p></>}</form></section></main>;
+  return <main className="practice-page dictation-page"><PracticeHeader label={active.scope.label} index={index} total={items.length} accuracy={index ? correctCount / index : 1} metric={average ? seconds(average) : '—'} onExit={onExit} /><div className="practice-progress"><span style={{ width: `${(index / items.length) * 100}%` }} /></div><section className="dictation-stage"><p className="dictation-label">根据释义写出词条</p><h1>{item.meaning}</h1>{hasGuidedCharacters && <p className="dictation-format-hint"><b>·</b> 代表空格，敲到这里时按下空格键即可点亮</p>}<form onSubmit={submit}><div className={`answer-slots ${submitted ? (wasCorrect ? 'correct' : 'wrong') : ''}`} onClick={() => input.current?.focus()} aria-hidden="true">{chars.map((char, charIndex) => /\s/u.test(char) ? <span className={`slot space-marker ${/\s/u.test(answerChars[charIndex] ?? '') ? 'typed' : ''}`} key={charIndex}>·</span> : /[\p{P}\p{S}]/u.test(char) ? <span className={`slot punctuation ${answerChars[charIndex] === char ? 'typed' : ''}`} key={charIndex}>{char}</span> : <span className="slot" key={charIndex}>{submitted && !wasCorrect ? char : answerChars[charIndex] ?? ''}</span>)}</div><input ref={input} className="dictation-input" value={answer} onChange={(event) => setAnswer(filterDictationAnswer(event.target.value, item.term))} disabled={submitted} autoCapitalize="off" autoComplete="off" spellCheck={false} aria-label="默写答案；点号代表空格，只有输入到点号位置时空格键才会生效" />{submitted ? <div className={`answer-feedback ${wasCorrect ? 'correct' : 'wrong'}`}><strong>{wasCorrect ? '回答正确' : '再记一次'}</strong>{!wasCorrect && <div className="answer-comparison"><p>你的答案：<b>{submittedAnswer}</b></p><p>正确答案：<b>{item.term}</b></p><small>{describeAnswerDifference(submittedAnswer, item.term, active.options.caseSensitive)}</small></div>}<button ref={nextButton} className="button button-primary" type="button" onClick={next}>{index + 1 === items.length ? '查看结果' : '下一题 →'}</button><p className="answer-next-hint">按 Enter {index + 1 === items.length ? '查看结果' : '进入下一题'}</p></div> : <><button className="button button-primary dictation-submit" type="submit" disabled={!normalizeAnswer(answer, active.options.caseSensitive)}>提交答案</button><p className="typing-hint">输入后按 Enter 提交</p></>}</form></section></main>;
 }
 
 function ResultView({ active, result, previous, onExit, onRetry }: { active: ActivePractice; result: PracticeResult; previous?: Session; onExit: () => void; onRetry: (items: Entry[]) => void }) {

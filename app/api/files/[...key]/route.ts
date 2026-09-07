@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:workers';
 
 async function workspaceId(request: Request) {
+  const localWorkspaceId = (env as unknown as { LOCAL_WORKSPACE_ID?: string }).LOCAL_WORKSPACE_ID?.trim();
+  if (localWorkspaceId) return localWorkspaceId;
   const token = (request.headers.get('cookie') ?? '').split(';').map((part) => part.trim()).find((part) => part.startsWith('cike_workspace='))?.slice('cike_workspace='.length);
   if (!token) return null;
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));

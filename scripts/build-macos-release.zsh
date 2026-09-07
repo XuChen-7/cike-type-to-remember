@@ -16,79 +16,77 @@ fi
 project_root="${0:A:h:h}"
 template_root="$project_root/release/macos"
 work_root="$project_root/.release-work"
-package_root="$work_root/词刻本地版_Apple芯片"
-installer_app="$package_root/安装词刻.app"
-resources_dir="$installer_app/Contents/Resources"
-payload_dir="$resources_dir/payload"
-payload_site="$payload_dir/site"
-launcher_app="$payload_dir/词刻.app"
+cache_root="$project_root/.release-cache"
+package_root="$work_root/键记本地版_Apple芯片"
+payload_dir="$package_root/.payload"
+program_dir="$payload_dir/program"
+runtime_dir="$payload_dir/runtime"
 artifact_dir="$project_root/artifacts"
 artifact_name="Cike-macOS-Apple-Silicon-v$version.zip"
 artifact_path="$artifact_dir/$artifact_name"
 checksum_path="$artifact_path.sha256"
-node_bin="${CIKE_NODE_BIN:-$(command -v node)}"
+node_version="${JIANJI_NODE_VERSION:-24.14.1}"
+node_archive="node-v$node_version-darwin-arm64.tar.gz"
+node_url="https://nodejs.org/dist/v$node_version/$node_archive"
+checksum_url="https://nodejs.org/dist/v$node_version/SHASUMS256.txt"
+cached_archive="$cache_root/$node_archive"
+cached_checksums="$cache_root/SHASUMS256-v$node_version.txt"
 
-[[ "$(/usr/bin/uname -m)" == "arm64" ]] || { print -u2 "Release builds require an arm64 Apple Silicon Mac (M1-M5, including Pro/Max/Ultra)."; exit 69; }
-[[ -x "$node_bin" ]] || { print -u2 "Node.js is missing."; exit 69; }
-/usr/bin/file "$node_bin" | /usr/bin/grep -q 'arm64' || { print -u2 "Node.js must contain an arm64 executable."; exit 69; }
+[[ "$(/usr/bin/uname -m)" == "arm64" ]] || { print -u2 "Release builds require an arm64 Apple Silicon Mac."; exit 69; }
 [[ -d "$project_root/node_modules" ]] || { print -u2 "node_modules is missing; run npm ci first."; exit 69; }
-[[ -f "$template_root/AppIcon.icns" ]] || { print -u2 "Release icon is missing."; exit 66; }
+[[ -f "$template_root/安装键记.command" ]] || { print -u2 "Installer template is missing."; exit 66; }
+[[ -f "$template_root/键记.webloc" ]] || { print -u2 "Shortcut template is missing."; exit 66; }
+[[ -f "$template_root/runtime/local-server.mjs" ]] || { print -u2 "Local server runtime is missing."; exit 66; }
+
+/bin/mkdir -p "$cache_root" "$artifact_dir"
+if [[ ! -f "$cached_archive" ]]; then
+  /usr/bin/curl --fail --location --retry 3 --output "$cached_archive" "$node_url"
+fi
+if [[ ! -f "$cached_checksums" ]]; then
+  /usr/bin/curl --fail --location --retry 3 --output "$cached_checksums" "$checksum_url"
+fi
+
+expected_checksum="$(/usr/bin/awk -v file="$node_archive" '$2 == file { print $1 }' "$cached_checksums")"
+actual_checksum="$(/usr/bin/shasum -a 256 "$cached_archive" | /usr/bin/awk '{ print $1 }')"
+[[ -n "$expected_checksum" && "$expected_checksum" == "$actual_checksum" ]] || { print -u2 "Official Node.js checksum verification failed."; exit 70; }
 
 cd "$project_root"
 npm run build
 
 /bin/rm -rf "$work_root"
-/bin/mkdir -p "$package_root" "$payload_dir/runtime" "$artifact_dir"
-/usr/bin/ditto "$template_root/installer" "$installer_app"
-/usr/bin/ditto "$template_root/launcher" "$launcher_app"
-/usr/bin/ditto "$template_root/AppIcon.icns" "$resources_dir/AppIcon.icns"
-/usr/bin/ditto "$template_root/AppIcon.icns" "$launcher_app/Contents/Resources/AppIcon.icns"
+/bin/mkdir -p "$package_root" "$program_dir" "$runtime_dir" "$artifact_dir" "$work_root/node"
+/usr/bin/tar -xzf "$cached_archive" -C "$work_root/node"
+official_node="$work_root/node/node-v$node_version-darwin-arm64/bin/node"
+[[ -x "$official_node" ]] || { print -u2 "Official Node.js executable is missing."; exit 70; }
+/usr/bin/file "$official_node" | /usr/bin/grep -q 'arm64' || { print -u2 "Official Node.js executable is not arm64."; exit 70; }
+publisher_id="$(/usr/bin/codesign -dv --verbose=4 "$official_node" 2>&1 | /usr/bin/awk -F= '/^TeamIdentifier=/{ print $2 }')"
+[[ "$publisher_id" == "HX7739G8FX" ]] || { print -u2 "Official Node.js publisher identity is missing or unexpected."; exit 70; }
+
+/usr/bin/ditto "$project_root/dist" "$program_dir/dist"
+/usr/bin/ditto "$template_root/runtime" "$runtime_dir"
+/usr/bin/ditto "$official_node" "$runtime_dir/node"
+/usr/bin/ditto "$template_root/安装键记.command" "$package_root/安装键记.command"
+/usr/bin/ditto "$template_root/键记.webloc" "$payload_dir/键记.webloc"
 /usr/bin/ditto "$template_root/使用说明.txt" "$package_root/使用说明.txt"
-/bin/echo "$version" > "$resources_dir/VERSION"
+/bin/echo "$version" > "$payload_dir/VERSION"
+/bin/chmod 755 "$package_root/安装键记.command" "$runtime_dir/node"
 
-/usr/bin/rsync -a \
-  --exclude='/.git' \
-  --exclude='/.wrangler' \
-  --exclude='/.next' \
-  --exclude='/.vinext' \
-  --exclude='/dist' \
-  --exclude='/artifacts' \
-  --exclude='/.release-work' \
-  --exclude='/release' \
-  --exclude='/release-notes' \
-  --exclude='/scripts' \
-  --exclude='/README.md' \
-  --exclude='/.cike-local-server.log' \
-  --exclude='/.cike-local-server.pid' \
-  --exclude='/tsconfig.tsbuildinfo' \
-  --exclude='/.env' \
-  --exclude='/.env.*' \
-  "$project_root/" "$payload_site/"
-
-if [[ -f "$payload_site/.openai/hosting.json" ]]; then
-  /usr/bin/plutil -remove project_id "$payload_site/.openai/hosting.json" >/dev/null 2>&1 || true
-fi
-
-/usr/bin/ditto "$node_bin" "$payload_dir/runtime/node"
-/bin/chmod 755 "$installer_app/Contents/MacOS/installer" "$launcher_app/Contents/MacOS/launcher" "$payload_dir/runtime/node"
-
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$installer_app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$installer_app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$launcher_app/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $version" "$launcher_app/Contents/Info.plist"
-
-/usr/bin/codesign --force --deep --sign - "$launcher_app"
-/usr/bin/codesign --force --deep --sign - "$installer_app"
-/usr/bin/codesign --verify --deep --strict "$installer_app"
+# Preserve the user-selected artwork as the Finder icon for the desktop shortcut.
+iconset_dir="$work_root/AppIcon.iconset"
+/usr/bin/iconutil -c iconset "$template_root/AppIcon.icns" -o "$iconset_dir"
+/usr/bin/sips -i "$iconset_dir/icon_512x512@2x.png" >/dev/null
+/usr/bin/xcrun DeRez -only icns "$iconset_dir/icon_512x512@2x.png" > "$work_root/shortcut-icon.rsrc"
+/usr/bin/xcrun Rez -append "$work_root/shortcut-icon.rsrc" -o "$payload_dir/键记.webloc"
+/usr/bin/xcrun SetFile -a C "$payload_dir/键记.webloc"
 
 /bin/rm -f "$artifact_path" "$checksum_path"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$package_root" "$artifact_path"
 /usr/bin/unzip -tq "$artifact_path"
 
-private_files="$(/usr/bin/zipinfo -1 "$artifact_path" | /usr/bin/grep -E '/(\.wrangler|\.git|\.env)(/|$)|\.cike-local-server\.(log|pid)$|tsconfig\.tsbuildinfo$' || true)"
-if [[ -n "$private_files" ]]; then
-  print -u2 "Release contains forbidden local files:"
-  print -u2 -- "$private_files"
+forbidden_files="$(/usr/bin/zipinfo -1 "$artifact_path" | /usr/bin/grep -E '/(node_modules|\.wrangler|\.git|\.env)(/|$)|\.node$|workerd$|tailwindcss-oxide|rolldown-binding|\.log$|\.pid$' || true)"
+if [[ -n "$forbidden_files" ]]; then
+  print -u2 "Release contains forbidden development or native files:"
+  print -u2 -- "$forbidden_files"
   exit 70
 fi
 

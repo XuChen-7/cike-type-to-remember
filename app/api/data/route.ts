@@ -46,6 +46,16 @@ async function seedWorkspace(workspaceId: string) {
 
 async function getWorkspace(request: Request) {
   await ensureSchema();
+  const localWorkspaceId = (env as unknown as { LOCAL_WORKSPACE_ID?: string }).LOCAL_WORKSPACE_ID?.trim();
+  if (localWorkspaceId) {
+    const found = await env.DB.prepare('SELECT id FROM workspaces WHERE id = ?').bind(localWorkspaceId).first<{ id: string }>();
+    if (!found) {
+      const now = Date.now();
+      await env.DB.prepare('INSERT INTO workspaces (id, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?)').bind(localWorkspaceId, await hashToken(`jianji-local-${localWorkspaceId}`), now, now).run();
+      await seedWorkspace(localWorkspaceId);
+    }
+    return { id: localWorkspaceId, token: null as string | null };
+  }
   const token = cookieValue(request, COOKIE);
   if (token) {
     const found = await env.DB.prepare('SELECT id FROM workspaces WHERE token_hash = ?').bind(await hashToken(token)).first<{ id: string }>();
