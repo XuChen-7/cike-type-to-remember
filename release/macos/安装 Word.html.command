@@ -13,7 +13,7 @@ data_dir="$support_dir/data"
 backup_root="$support_dir/backups"
 legacy_site="$support_dir/site"
 desktop_dir="$user_home/Desktop"
-shortcut="$desktop_dir/键记.webloc"
+shortcut="$desktop_dir/Word.html.webloc"
 launch_agents_dir="$user_home/Library/LaunchAgents"
 launch_agent="$launch_agents_dir/com.jianji.local.plist"
 label="com.jianji.local"
@@ -21,7 +21,7 @@ uid="$(/usr/bin/id -u)"
 
 show_dialog() {
   if [[ "${JIANJI_NONINTERACTIVE:-0}" != "1" ]]; then
-    /usr/bin/osascript -e "display dialog \"$1\" buttons {\"好\"} default button 1 with title \"键记\"" >/dev/null 2>&1 || true
+    /usr/bin/osascript -e "display dialog \"$1\" buttons {\"好\"} default button 1 with title \"Word.html\"" >/dev/null 2>&1 || true
   fi
 }
 
@@ -85,7 +85,7 @@ fi
 /bin/chmod 755 "$runtime_dir/node"
 /bin/echo "$version" > "$support_dir/version"
 
-/usr/bin/ditto "$payload_dir/键记.webloc" "$shortcut"
+/usr/bin/ditto "$payload_dir/Word.html.webloc" "$shortcut"
 
 /usr/bin/plutil -create xml1 "$launch_agent"
 /usr/libexec/PlistBuddy -c "Add :Label string $label" "$launch_agent"
@@ -100,8 +100,8 @@ fi
 /usr/libexec/PlistBuddy -c "Add :EnvironmentVariables:JIANJI_DATA_DIR string $data_dir" "$launch_agent"
 /usr/libexec/PlistBuddy -c 'Add :EnvironmentVariables:JIANJI_HOST string 127.0.0.1' "$launch_agent"
 /usr/libexec/PlistBuddy -c 'Add :EnvironmentVariables:JIANJI_PORT string 3000' "$launch_agent"
-/usr/libexec/PlistBuddy -c "Add :StandardOutPath string $support_dir/键记运行日志.log" "$launch_agent"
-/usr/libexec/PlistBuddy -c "Add :StandardErrorPath string $support_dir/键记运行日志.log" "$launch_agent"
+/usr/libexec/PlistBuddy -c "Add :StandardOutPath string $support_dir/Word.html运行日志.log" "$launch_agent"
+/usr/libexec/PlistBuddy -c "Add :StandardErrorPath string $support_dir/Word.html运行日志.log" "$launch_agent"
 /usr/libexec/PlistBuddy -c 'Add :RunAtLoad bool true' "$launch_agent"
 /usr/libexec/PlistBuddy -c 'Add :KeepAlive bool true' "$launch_agent"
 /usr/libexec/PlistBuddy -c 'Add :ProcessType string Interactive' "$launch_agent"
@@ -113,11 +113,12 @@ if [[ "${JIANJI_SKIP_LAUNCH_AGENT:-0}" != "1" ]]; then
 fi
 
 if [[ -L "$desktop_dir/词刻.app" ]]; then /bin/rm "$desktop_dir/词刻.app"; fi
+if [[ -f "$desktop_dir/键记.webloc" ]]; then /bin/rm "$desktop_dir/键记.webloc"; fi
 
 if [[ "${JIANJI_SKIP_OPEN:-0}" != "1" ]]; then
-  show_dialog "键记 v$version ${install_mode}完成！已有科目、词条和练习记录均已保留。"
+  show_dialog "Word.html v$version ${install_mode}完成！已有科目、词条和练习记录均已保留。"
   /bin/sleep 1
   /usr/bin/open 'http://127.0.0.1:3000/'
 fi
 
-print "键记 v$version ${install_mode}完成。"
+print "Word.html v$version ${install_mode}完成。"

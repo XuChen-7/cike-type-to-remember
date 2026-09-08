@@ -219,12 +219,12 @@ const server = createServer(async (incoming, outgoing) => {
   } catch (error) {
     console.error('request-failed', error);
     if (!outgoing.headersSent) outgoing.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
-    outgoing.end('键记暂时无法处理这个请求。');
+    outgoing.end('Word.html 暂时无法处理这个请求。');
   }
 });
 
 server.listen(port, host, () => {
-  console.log(`键记本地服务已启动：http://${host}:${port}/`);
+  console.log(`Word.html 本地服务已启动：http://${host}:${port}/`);
   console.log(`数据目录：${dataDir}`);
 });
 

@@ -17,12 +17,12 @@ project_root="${0:A:h:h}"
 template_root="$project_root/release/macos"
 work_root="$project_root/.release-work"
 cache_root="$project_root/.release-cache"
-package_root="$work_root/键记本地版_Apple芯片"
+package_root="$work_root/Word.html本地版_Apple芯片"
 payload_dir="$package_root/.payload"
 program_dir="$payload_dir/program"
 runtime_dir="$payload_dir/runtime"
 artifact_dir="$project_root/artifacts"
-artifact_name="Cike-macOS-Apple-Silicon-v$version.zip"
+artifact_name="Word-html-macOS-Apple-Silicon-v$version.zip"
 artifact_path="$artifact_dir/$artifact_name"
 checksum_path="$artifact_path.sha256"
 node_version="${JIANJI_NODE_VERSION:-24.14.1}"
@@ -34,8 +34,8 @@ cached_checksums="$cache_root/SHASUMS256-v$node_version.txt"
 
 [[ "$(/usr/bin/uname -m)" == "arm64" ]] || { print -u2 "Release builds require an arm64 Apple Silicon Mac."; exit 69; }
 [[ -d "$project_root/node_modules" ]] || { print -u2 "node_modules is missing; run npm ci first."; exit 69; }
-[[ -f "$template_root/安装键记.command" ]] || { print -u2 "Installer template is missing."; exit 66; }
-[[ -f "$template_root/键记.webloc" ]] || { print -u2 "Shortcut template is missing."; exit 66; }
+[[ -f "$template_root/安装 Word.html.command" ]] || { print -u2 "Installer template is missing."; exit 66; }
+[[ -f "$template_root/Word.html.webloc" ]] || { print -u2 "Shortcut template is missing."; exit 66; }
 [[ -f "$template_root/runtime/local-server.mjs" ]] || { print -u2 "Local server runtime is missing."; exit 66; }
 
 /bin/mkdir -p "$cache_root" "$artifact_dir"
@@ -65,19 +65,19 @@ publisher_id="$(/usr/bin/codesign -dv --verbose=4 "$official_node" 2>&1 | /usr/b
 /usr/bin/ditto "$project_root/dist" "$program_dir/dist"
 /usr/bin/ditto "$template_root/runtime" "$runtime_dir"
 /usr/bin/ditto "$official_node" "$runtime_dir/node"
-/usr/bin/ditto "$template_root/安装键记.command" "$package_root/安装键记.command"
-/usr/bin/ditto "$template_root/键记.webloc" "$payload_dir/键记.webloc"
+/usr/bin/ditto "$template_root/安装 Word.html.command" "$package_root/安装 Word.html.command"
+/usr/bin/ditto "$template_root/Word.html.webloc" "$payload_dir/Word.html.webloc"
 /usr/bin/ditto "$template_root/使用说明.txt" "$package_root/使用说明.txt"
 /bin/echo "$version" > "$payload_dir/VERSION"
-/bin/chmod 755 "$package_root/安装键记.command" "$runtime_dir/node"
+/bin/chmod 755 "$package_root/安装 Word.html.command" "$runtime_dir/node"
 
 # Preserve the user-selected artwork as the Finder icon for the desktop shortcut.
 iconset_dir="$work_root/AppIcon.iconset"
 /usr/bin/iconutil -c iconset "$template_root/AppIcon.icns" -o "$iconset_dir"
 /usr/bin/sips -i "$iconset_dir/icon_512x512@2x.png" >/dev/null
 /usr/bin/xcrun DeRez -only icns "$iconset_dir/icon_512x512@2x.png" > "$work_root/shortcut-icon.rsrc"
-/usr/bin/xcrun Rez -append "$work_root/shortcut-icon.rsrc" -o "$payload_dir/键记.webloc"
-/usr/bin/xcrun SetFile -a C "$payload_dir/键记.webloc"
+/usr/bin/xcrun Rez -append "$work_root/shortcut-icon.rsrc" -o "$payload_dir/Word.html.webloc"
+/usr/bin/xcrun SetFile -a C "$payload_dir/Word.html.webloc"
 
 /bin/rm -f "$artifact_path" "$checksum_path"
 /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$package_root" "$artifact_path"
